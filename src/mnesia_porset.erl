@@ -66,7 +66,7 @@
 
 
 register() ->
-    register(porset_copies).
+    register(default_alias()).
 
 register(Alias) ->
     Module = ?MODULE,
@@ -90,38 +90,33 @@ semantics(_Alias, _) ->
 %%     true.
 
 init_backend() ->
-    ?DBG(init_backend),
+    lager:debug(init_backend),
     %% cheat and stuff a marker in mnesia_gvar
-    K = backend_init_marker(),
-    case try ets:lookup_element(mnesia_gvar, K, 2) catch _:_ -> error end of
-        error ->
-            mnesia_lib:set(K, true);
-        Other ->
-            error({backend_already_initialized, {?MODULE, Other}})
-    end,
-    ok.
+    mnesia_porset_admin:ensure_started().
 
-backend_init_marker() -> porset_copies.
+
+default_alias() -> porset_copies.
 
 add_aliases(_As) ->
-    ?DBG(_As),
-    ct:log("add_aliases(~p)", [_As]),
-    true = mnesia_lib:val(backend_init_marker()),
+    lager:debug("add_aliases(~p)", [_As]),
+    mnesia_porset_admin:ensure_started(),
+    % TODO add alias
     ok.
 
 remove_aliases(_) ->
+    % TODO remove alias
     ok.
 
 
 %% Table operations
 
 check_definition(porset_copies, _Tab, _Nodes, _Props) ->
-    ?DBG("~p ~p ~p~n", [_Tab, _Nodes, _Props]),
+    lager:debug("~p ~p ~p~n", [_Tab, _Nodes, _Props]),
     ok.
 
 create_table(porset_copies, Tab, Props) when is_atom(Tab) ->
     Tid = ets:new(Tab, [public, proplists:get_value(type, Props, set), {keypos, 2}]),
-    ?DBG("~p Create: ~p(~p) ~p~n", [self(), Tab, Tid, Props]),
+    lager:debug("~p Create: ~p(~p) ~p~n", [self(), Tab, Tid, Props]),
     mnesia_lib:set({?MODULE, Tab}, Tid),
     ok;
 create_table(_, Tag={Tab, index, {_Where, Type0}}, _Opts) ->

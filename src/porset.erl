@@ -114,7 +114,7 @@ init_backend() ->
 %     {test, ?MODULE, backend_init}.
 
 add_aliases(_As) ->
-    ?DBG(_As),
+    lager:debug(_As),
     % ct:log("add_aliases(~p)", [_As]),
     true = mnesia_lib:val(default_alias()),
     ok.

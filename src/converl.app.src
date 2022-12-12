@@ -5,7 +5,9 @@
   {mod, {converl_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    mnesia,
+    lager
    ]},
   {env,[]},
   {modules, []},

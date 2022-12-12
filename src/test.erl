@@ -7,5 +7,4 @@
 
 
 main() ->
-  S = #studnet{student_id = 1},
-  io:format("~p~n", [S]).
+  lager:debug("start").
