@@ -47,9 +47,18 @@
 
 -endif.
 
+
+-type op() :: write | delete.
+-type val() :: any().
+-type ts() :: mnesia_causal:vclock().
+
+
 %% types() ->
 %%     [{fs_copies, ?MODULE},
 %%      {raw_fs_copies, ?MODULE}].
+
+
+%%% convenience functions
 
 register() ->
     register(default_alias()).
@@ -64,6 +73,8 @@ register(Alias) ->
         {aborted, Reason} ->
             {error, Reason}
     end.
+
+%%% mnesia_backend_type callbacks
 
 semantics(porset_copies, storage) ->
     ram_copies;
@@ -226,9 +237,9 @@ lookup(porset_copies, Tab, Key) ->
     ets:lookup(
         mnesia_lib:val({?MODULE, Tab}), Key).
 
-delete(porset_copies, Tab, Key) ->
-    ets:delete(
-        mnesia_lib:val({?MODULE, Tab}), Key).
+delete(porset_copies, Tab, {Key, Ts}) ->
+    ets:insert(
+        mnesia_lib:val({?MODULE, Tab}), {Key, Ts, delete}).
 
 match_delete(porset_copies, Tab, Pat) ->
     ets:match_delete(
@@ -281,3 +292,15 @@ select(porset_copies, Tab, Ms, Limit) when is_integer(Limit); Limit =:= infinity
 
 repair_continuation(Cont, Ms) ->
     ets:repair_continuation(Cont, Ms).
+
+
+%%% pure op-based orset implementation
+
+% -spec obsolete({ts(), {op(), val()}}, {ts(), {op(), val()}}) -> boolean().
+% obsolete({Ts1, {write, V1}}, {Ts2, {write, V1}}) ->
+%     V1 =:= V2 andalso mnesia_causal:compare_vclock(Ts1 < Ts2) =:= lt;
+% obsolete({Ts1, {write, V1}}, {Ts2, {delete, V2}}) ->
+%     V1 =:= V2 and also mnesia_causal:compare_vclock(Ts1 < Ts2) =:= lt; 
+% obsolete({Ts1, {delete, V1}}, _X) ->
+%     true.
+
