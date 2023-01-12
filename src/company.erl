@@ -18,6 +18,25 @@ start() ->
     % call from a side
     rpc:call('b@127.0.0.1', company, write_proj, [2]).
 
+start_por() ->
+    % TODO fix this schema deletion
+    delete_schema(),
+    create_schema(),
+    mnesia_start(),
+    rpc:multicall(company:all_nodes(), mnesia_porset, register, []),
+    timer:sleep(100),
+    init_por(),
+    write_proj(1).
+
+prepare_por() ->
+    delete_schema(),
+    create_schema(),
+    mnesia_start(),
+    rpc:multicall(all_nodes(), mnesia_porset, register, []).
+
+
+check() ->
+    rpc:multicall(all_nodes(), ets, tab2list, [project]).
 
 load_bin() ->
     rpc:multicall(all_nodes(), code, purge, [company]),
@@ -33,12 +52,12 @@ write_proj(1) ->
                                 lang = "Erlang"});
 write_proj(2) ->
     case mnesia:dirty_read(project, "otp") of
-        [#project{name = "otp",
-                   number = 1,
-                   lang = "Erlang"}] ->
+        [A = #project{name = "otp",
+                      number = 1,
+                      lang = "Erlang"}] ->
             mnesia:dirty_write(project,
                                #project{name = "top",
-                                        number = 2,
+                                        number = A#project.number + 1,
                                         lang = "Erlang"});
         [] ->
             write_proj(2)
@@ -48,7 +67,6 @@ write_proj(N) when is_list(N) ->
                        #project{name = N,
                                 number = 1,
                                 lang = "Erlang"}).
-
 
     % mnesia:dirty_write(project,
     %                    #project{name = "Naiad",
@@ -65,18 +83,17 @@ init_rocksdb() ->
                          {attributes, record_info(fields, test_table)}]).
 
 init_por() ->
-    mnesia:create_table(test_table,
-                        [{porset_copies, all_nodes()},
-                         {attributes, record_info(fields, test_table)}]).
+    mnesia:create_table(project,
+                        [{porset_copies, all_nodes()}, {attributes, record_info(fields, project)}]).
 
 write_por() ->
-    mnesia:dirty_write(test_table,
-                       #test_table{name = "otp",
-                                   id = 1,
-                                   age = 3}).
+    mnesia:dirty_write(project,
+                       #project{name = "otp",
+                                   number = 1,
+                                   lang = "Erlang"}).
 
 finish_por() ->
-    mnesia:delete_table(test_table).
+    mnesia:delete_table(project).
 
 init() ->
     mnesia:create_table(employee, [{attributes, record_info(fields, employee)}]),
@@ -125,7 +142,6 @@ dist_init() ->
                         [{type, bag},
                          {ram_copies, ['a@127.0.0.1', 'b@127.0.0.1']},
                          {attributes, record_info(fields, in_proj)}]).
-
 
 create_schema() ->
     mnesia:create_schema(all_nodes()).
