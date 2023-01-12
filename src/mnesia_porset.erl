@@ -328,8 +328,12 @@ causal_compact(Tab, Ele) ->
     ok = remove_obsolete(Tab, Ele),
     not redundant(Tab, Ele).
 
+%% @doc checks whether the input element is redundant
+%% i.e. if there are any other elements in the table that obsoletes this element
+%% @end
 -spec redundant(mnesia:table(), element()) -> boolean().
 redundant(Tab, Element) ->
+    lager:debug("checking redundancy"),
     check_redundant(Tab,
                     ets:first(
                         mnesia_lib:val({?MODULE, Tab})),
@@ -337,24 +341,28 @@ redundant(Tab, Element) ->
 
 check_redundant(_Tab, '$end_of_table', _E) ->
     false;
-check_redundant(Tab, Key, {Ts1, {Op1, Val1}}) ->
+check_redundant(Tab, Key, Ele1) ->
     NextKey =
         ets:next(
             mnesia_lib:val({?MODULE, Tab}), Key),
-    Tup = ets:lookup(
-              mnesia_lib:val({?MODULE, Tab}), Key),
-    {Ts2, {Op2, Val2}} = get_element(Tup),
-    case obsolete({Ts1, {Op1, Val1}}, {Ts2, {Op2, Val2}}) of
+    % guaranteed to return a value since we are iterating over all keys
+    [Tup] =
+        ets:lookup(
+            mnesia_lib:val({?MODULE, Tab}), Key),
+    Ele2 = get_element(Tup),
+    case obsolete(Ele1, Ele2) of
         true ->
+            lager:debug("Element ~p in table ~p makes new element ~p redundant", [Ele2, Tab, Ele1]),
             true;
         false ->
-            check_redundant(Tab, NextKey, {Ts1, {Op1, Val1}})
+            check_redundant(Tab, NextKey, Ele1)
     end.
 
 % TODO there might be better ways of doing the scan
 %% removes elements that are obsoleted by Ele
 -spec remove_obsolete(mnesia:table(), element()) -> ok.
 remove_obsolete(Tab, Ele) ->
+    lager:debug("removing obsolete"),
     do_remove_obsolete(Tab,
                        ets:first(
                            mnesia_lib:val({?MODULE, Tab})),
@@ -363,21 +371,26 @@ remove_obsolete(Tab, Ele) ->
 -spec do_remove_obsolete(mnesia:table(), term(), element()) -> ok.
 do_remove_obsolete(_Tab, '$end_of_table', _E) ->
     ok;
-do_remove_obsolete(Tab, Key, Ele = {Ts2, {Op2, Val2}}) ->
+do_remove_obsolete(Tab, Key, Ele2) ->
     NextKey =
         ets:next(
             mnesia_lib:val({?MODULE, Tab}), Key),
-    Tup = ets:lookup(
-              mnesia_lib:val({?MODULE, Tab}), Key),
-    {Ts1, {Op1, Val1}} = get_element(Tup),
-    case obsolete({Ts1, {Op1, Val1}}, {Ts2, {Op2, Val2}}) of
-        true ->
-            ets:delete(
-                mnesia_lib:val({?MODULE, Tab}), Key);
-        false ->
-            ok
-    end,
-    do_remove_obsolete(Tab, NextKey, Ele).
+    RmOb =
+        fun(Ele1) ->
+           case obsolete(Ele1, Ele2) of
+               true ->
+                   lager:debug("removing obsolete element with key~p~n", [Key]),
+                   ets:delete(
+                       mnesia_lib:val({?MODULE, Tab}), Key);
+               false -> ok
+           end
+        end,
+    [Tup] =
+        ets:lookup(
+            mnesia_lib:val({?MODULE, Tab}), Key),
+    Ele1 = get_element(Tup),
+    RmOb(Ele1),
+    do_remove_obsolete(Tab, NextKey, Ele2).
 
 %% @returns true if second element obsoletes the first one
 -spec obsolete({ts(), {op(), val()}}, {ts(), {op(), val()}}) -> boolean().
