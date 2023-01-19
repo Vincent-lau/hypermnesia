@@ -31,7 +31,7 @@
          fixtable/3, validate_key/6, validate_record/6, first/2, last/2, next/3, prev/3, slot/3,
          insert/3, update_counter/4, lookup/3, delete/3, match_delete/3, select/1, select/3,
          select/4, repair_continuation/2]).
--export([register/0, register/1]).
+-export([register/0, register/1, create_schema/1, create_schema/2]).
 
 -define(DEBUG, 1).
 
@@ -110,6 +110,14 @@ remove_aliases(_) ->
     % TODO remove alias
     ok.
 
+create_schema(Nodes) ->
+    create_schema(Nodes, [default_alias()]).
+
+
+create_schema(Nodes, Aliases) when is_list(Nodes), is_list(Aliases) ->
+    mnesia:create_schema(Nodes, [{backend_types,
+                                    [{A, ?MODULE} || A <- Aliases]}]).
+
 %% Table operations
 
 check_definition(porset_copies, _Tab, _Nodes, _Props) ->
@@ -117,9 +125,9 @@ check_definition(porset_copies, _Tab, _Nodes, _Props) ->
     ok.
 
 create_table(porset_copies, Tab, Props) when is_atom(Tab) ->
-    Tid = ets:new(Tab, [public, proplists:get_value(type, Props, bag), {keypos, 2}]),
+    Tid = ets:new(Tab, [public, bag, {keypos, 2}]),
     % Tid = ets:whereis(Name),
-    io:format("table created 1: ~p with tid ~p and prop ~p~n", [Tab, Tid, Props]),
+    lager:debug("table created 1: ~p with tid ~p and prop ~p~n", [Tab, Tid, Props]),
     mnesia_lib:set({?MODULE, Tab}, Tid),
     ok;
 create_table(_, Tag = {Tab, index, {_Where, Type0}}, _Opts) ->
@@ -382,7 +390,7 @@ do_remove_obsolete(Tab, Key, Ele2) ->
                            end
                         end,
                         Eles1),
-    lager:debug("kept ~p~n", [Keep]),
+    lager:debug("removed obsolete ~p kept ~p~n", [Tups -- Keep, Keep]),
     ets:delete(
         mnesia_lib:val({?MODULE, Tab}), Key),
     ets:insert(
@@ -395,7 +403,7 @@ obsolete({Ts1, {write, V1}}, {Ts2, {write, V2}}) ->
     equals(V1, V2) andalso mnesia_causal:compare_vclock(Ts1, Ts2) =:= lt;
 obsolete({Ts1, {write, V1}}, {Ts2, {delete, V2}}) ->
     lager:debug("equals ~p~n", [equals(V1, V2)]),
-    lager:debug("vclock ~p~n", [mnesia_causal:compare_vclock(Ts1, Ts2)]),
+    lager:debug("vclock V1~p V2~p ~p~n", [V1, V2, mnesia_causal:compare_vclock(Ts1, Ts2)]),
     equals(V1, V2) andalso mnesia_causal:compare_vclock(Ts1, Ts2) =:= lt;
 obsolete({_Ts1, {delete, _V1}}, _X) ->
     true.

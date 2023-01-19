@@ -11,22 +11,33 @@ all_nodes() ->
     ['a@127.0.0.1', 'b@127.0.0.1', 'c@127.0.0.1'].
 
 start() ->
+    delete_schema(),
+    create_schema(),
     mnesia_start(),
+    init_proj(),
     timer:sleep(1000),
 
     write_proj(1),
     % call from a side
     rpc:call('b@127.0.0.1', company, write_proj, [2]).
 
+start_dbg() ->
+    debugger:start(),
+    mnesia:delete_schema([node()]),
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+    mnesia_porset:register().
+
 start_por() ->
-    % TODO fix this schema deletion
-    delete_schema(),
-    create_schema(),
     mnesia_start(),
-    rpc:multicall(company:all_nodes(), mnesia_porset, register, []),
+    rpc:multicall(
+        company:all_nodes(), mnesia_porset, register, []),
     timer:sleep(100),
     init_por(),
     write_proj(1).
+    % timer:sleep(2000),
+    % mnesia:dirty_delete(project, "otp").
+
 
 prepare_por() ->
     delete_schema(),
@@ -34,9 +45,12 @@ prepare_por() ->
     mnesia_start(),
     rpc:multicall(all_nodes(), mnesia_porset, register, []).
 
-
 check() ->
-    rpc:multicall(all_nodes(), ets, tab2list, [project]).
+    rpc:multicall(all_nodes(), ets, tab2list, [mnesia_lib:val({mnesia_porset, project})]).
+
+check_por() ->
+    T=mnesia_lib:val({mnesia_porset, project}),
+    ets:tab2list(T).
 
 load_bin() ->
     rpc:multicall(all_nodes(), code, purge, [company]),
@@ -89,8 +103,8 @@ init_por() ->
 write_por() ->
     mnesia:dirty_write(project,
                        #project{name = "otp",
-                                   number = 1,
-                                   lang = "Erlang"}).
+                                number = 1,
+                                lang = "Erlang"}).
 
 finish_por() ->
     mnesia:delete_table(project).
@@ -144,7 +158,7 @@ dist_init() ->
                          {attributes, record_info(fields, in_proj)}]).
 
 create_schema() ->
-    mnesia:create_schema(all_nodes()).
+    mnesia_porset:create_schema(all_nodes()).
 
 delete_schema() ->
     mnesia:delete_schema(all_nodes()).
