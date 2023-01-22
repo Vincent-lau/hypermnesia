@@ -47,11 +47,6 @@
 
 -endif.
 
--type op() :: write | delete.
--type val() :: any().
--type ts() :: mnesia_causal:vclock().
--type element() :: {ts(), {op(), val()}}.
-
 %% types() ->
 %%     [{fs_copies, ?MODULE},
 %%      {raw_fs_copies, ?MODULE}].
@@ -97,9 +92,6 @@ init_backend() ->
 default_alias() ->
     porset_copies.
 
-key_pos() ->
-    2.
-
 add_aliases(_As) ->
     lager:debug("add_aliases(~p)", [_As]),
     mnesia_porset_admin:ensure_started(),
@@ -113,10 +105,8 @@ remove_aliases(_) ->
 create_schema(Nodes) ->
     create_schema(Nodes, [default_alias()]).
 
-
 create_schema(Nodes, Aliases) when is_list(Nodes), is_list(Aliases) ->
-    mnesia:create_schema(Nodes, [{backend_types,
-                                    [{A, ?MODULE} || A <- Aliases]}]).
+    mnesia:create_schema(Nodes, [{backend_types, [{A, ?MODULE} || A <- Aliases]}]).
 
 %% Table operations
 
@@ -235,7 +225,7 @@ validate_key(_Alias, _Tab, RecName, Arity, Type, _Key) ->
 
 -spec effect(mnesia:table(), tuple()) -> ok.
 effect(Tab, Tup) ->
-    case causal_compact(Tab, obj2ele(Tup)) of
+    case causal_compact(Tab, porset_ele:obj2ele(Tup)) of
         true ->
             lager:debug("not redundant, inserting ~p into ~p~n",
                         [Tup, mnesia_lib:val({?MODULE, Tab})]),
@@ -251,7 +241,7 @@ insert(Alias, Tab, {Obj, Ts}) ->
                 "~p and ts ~p~n",
                 [Alias, Tab, Obj, Ts]),
     try
-        Tup = add_meta(Obj, Ts, write),
+        Tup = porset_ele:add_meta(Obj, Ts, write),
         lager:debug("inserting ~p into ~p~n", [Tup, mnesia_lib:val({?MODULE, Tab})]),
         effect(Tab, Tup)
     catch
@@ -263,11 +253,10 @@ lookup(porset_copies, Tab, Key) ->
     Res = ets:lookup(
               mnesia_lib:val({?MODULE, Tab}), Key),
     lager:debug("running my own lookup function on ~p, got ~p", [Tab, Res]),
-    IsWrite = fun(Tup) -> get_op(Tup) =:= write end,
     lists:filtermap(fun(Tup) ->
-                       case IsWrite(Tup) of
+                       case porset_ele:tup_is_write(Tup) of
                            false -> false;
-                           true -> {true, get_val(Tup)}
+                           true -> {true, porset_ele:get_val_tup(Tup)}
                        end
                     end,
                     Res).
@@ -275,7 +264,7 @@ lookup(porset_copies, Tab, Key) ->
 delete(porset_copies, Tab, {Key, Ts}) ->
     lager:debug("running custom delete function key: ~p, ts: ~p tab: ~p", [Key, Ts, Tab]),
     DummyVal = {Tab, Key},
-    Tup = add_meta(DummyVal, Ts, delete),
+    Tup = porset_ele:add_meta(DummyVal, Ts, delete),
     effect(Tab, Tup).
 
 match_delete(porset_copies, Tab, Pat) ->
@@ -334,7 +323,7 @@ repair_continuation(Cont, Ms) ->
 
 %% removes obsolete elements
 %% @returns whether this element should be added
--spec causal_compact(mnesia:table(), element()) -> boolean().
+-spec causal_compact(mnesia:table(), porset_ele:element()) -> boolean().
 causal_compact(Tab, Ele) ->
     ok = remove_obsolete(Tab, Ele),
     not redundant(Tab, Ele).
@@ -342,105 +331,93 @@ causal_compact(Tab, Ele) ->
 %% @doc checks whether the input element is redundant
 %% i.e. if there are any other elements in the table that obsoletes this element
 %% @end
--spec redundant(mnesia:table(), element()) -> boolean().
-redundant(Tab, Element) ->
+-spec redundant(mnesia:table(), porset_ele:element()) -> boolean().
+redundant(_Tab, {_Ts, {delete, _Val}}) ->
+    lager:debug("element is a delete, redundant"),
+    true;
+redundant(Tab, Ele) ->
     lager:debug("checking redundancy"),
-    check_redundant(Tab, first(porset_copies, Tab), Element).
-
-check_redundant(_Tab, '$end_of_table', _E) ->
-    lager:debug("element ~p is not redundant", [_E]),
-    false;
-check_redundant(Tab, Key, Ele1) ->
-    NextKey = next(porset_copies, Tab, Key),
-    % guaranteed to return a value since we are iterating over all keys
+    Key = porset_ele:get_val_key(
+              porset_ele:get_val_ele(Ele)),
     Tups =
         ets:lookup(
             mnesia_lib:val({?MODULE, Tab}), Key),
     lager:debug("found ~p~n", [Tups]),
-    Eles2 = lists:map(fun obj2ele/1, Tups),
+    Eles2 = lists:map(fun porset_ele:obj2ele/1, Tups),
     lager:debug("generated ~p~n", [Eles2]),
-    lists:any(fun(Ele2) -> obsolete(Ele1, Ele2) end, Eles2)
-    orelse check_redundant(Tab, NextKey, Ele1).
+    lists:any(fun(Ele2) -> porset_ele:obsolete(Ele, Ele2) end, Eles2).
+
+% check_redundant(_Tab, '$end_of_table', _E) ->
+%     lager:debug("element ~p is not redundant", [_E]),
+%     false;
+% check_redundant(Tab, Key, Ele1) ->
+%     NextKey = next(porset_copies, Tab, Key),
+%     % guaranteed to return a value since we are iterating over all keys
+%     Tups =
+%         ets:lookup(
+%             mnesia_lib:val({?MODULE, Tab}), Key),
+%     lager:debug("found ~p~n", [Tups]),
+%     Eles2 = lists:map(fun obj2ele/1, Tups),
+%     lager:debug("generated ~p~n", [Eles2]),
+%     lists:any(fun(Ele2) -> obsolete(Ele1, Ele2) end, Eles2)
+%     orelse check_redundant(Tab, NextKey, Ele1).
 
 % TODO there might be better ways of doing the scan
 %% removes elements that are obsoleted by Ele
--spec remove_obsolete(mnesia:table(), element()) -> ok.
+%% When we check for elements obsoleted by Ele, we only care about those with
+%% the same key as Ele, no need to go through the entire table
+-spec remove_obsolete(mnesia:table(), porset_ele:element()) -> ok.
 remove_obsolete(Tab, Ele) ->
     lager:debug("checking obsolete"),
-    do_remove_obsolete(Tab, first(porset_copies, Tab), Ele).
-
--spec do_remove_obsolete(mnesia:table(), term(), element()) -> ok.
-do_remove_obsolete(_Tab, '$end_of_table', _E) ->
-    lager:debug("done removing obsolete"),
-    ok;
-do_remove_obsolete(Tab, Key, Ele2) ->
-    NextKey = next(porset_copies, Tab, Key),
-    % it's possible to have mutliple tuples since the store is keyed by ts
+    Key = porset_ele:get_val_key(
+              porset_ele:get_val_ele(Ele)),
+    lager:debug("key ~p~n", [Key]),
     Tups =
         ets:lookup(
             mnesia_lib:val({?MODULE, Tab}), Key),
-    lager:debug("found ~p~n", [Tups]),
-    Eles1 = lists:map(fun obj2ele/1, Tups),
-    lager:debug("generated ~p, input ele ~p~n", [Eles1, Ele2]),
-    Keep =
-        lists:filtermap(fun(Ele1) ->
-                           case obsolete(Ele1, Ele2) of
-                               true -> false;
-                               false -> {true, ele2obj(Ele1)}
-                           end
-                        end,
-                        Eles1),
-    lager:debug("removed obsolete ~p kept ~p~n", [Tups -- Keep, Keep]),
+    lager:debug("existing tuples ~p~n", [Tups]),
     ets:delete(
         mnesia_lib:val({?MODULE, Tab}), Key),
+    Keep =
+        lists:filter(fun(Tup) ->
+                        not
+                            porset_ele:obsolete(
+                                porset_ele:obj2ele(Tup), Ele)
+                     end,
+                     Tups),
+    lager:debug("removed obsolete ~p kept ~p~n", [Tups -- Keep, Keep]),
     ets:insert(
         mnesia_lib:val({?MODULE, Tab}), Keep),
-    do_remove_obsolete(Tab, NextKey, Ele2).
+    ok.
 
-%% @returns true if second element obsoletes the first one
--spec obsolete({ts(), {op(), val()}}, {ts(), {op(), val()}}) -> boolean().
-obsolete({Ts1, {write, V1}}, {Ts2, {write, V2}}) ->
-    equals(V1, V2) andalso mnesia_causal:compare_vclock(Ts1, Ts2) =:= lt;
-obsolete({Ts1, {write, V1}}, {Ts2, {delete, V2}}) ->
-    lager:debug("equals ~p~n", [equals(V1, V2)]),
-    lager:debug("vclock V1~p V2~p ~p~n", [V1, V2, mnesia_causal:compare_vclock(Ts1, Ts2)]),
-    equals(V1, V2) andalso mnesia_causal:compare_vclock(Ts1, Ts2) =:= lt;
-obsolete({_Ts1, {delete, _V1}}, _X) ->
-    true.
+    % do_remove_obsolete(Tab, first(porset_copies, Tab), Ele).
+
+% -spec do_remove_obsolete(mnesia:table(), term(), element()) -> ok.
+% do_remove_obsolete(_Tab, '$end_of_table', _E) ->
+%     lager:debug("done removing obsolete"),
+%     ok;
+% do_remove_obsolete(Tab, Key, Ele2) ->
+%     NextKey = next(porset_copies, Tab, Key),
+%     % it's possible to have mutliple tuples since the store is keyed by ts
+%     Tups =
+%         ets:lookup(
+%             mnesia_lib:val({?MODULE, Tab}), Key),
+%     lager:debug("found ~p~n", [Tups]),
+%     Eles1 = lists:map(fun obj2ele/1, Tups),
+%     lager:debug("generated ~p, input ele ~p~n", [Eles1, Ele2]),
+%     Keep =
+%         lists:filtermap(fun(Ele1) ->
+%                            case obsolete(Ele1, Ele2) of
+%                                true -> false;
+%                                false -> {true, ele2obj(Ele1)}
+%                            end
+%                         end,
+%                         Eles1),
+%     lager:debug("removed obsolete ~p kept ~p~n", [Tups -- Keep, Keep]),
+%     ets:delete(
+%         mnesia_lib:val({?MODULE, Tab}), Key),
+%     ets:insert(
+%         mnesia_lib:val({?MODULE, Tab}), Keep),
+%     do_remove_obsolete(Tab, NextKey, Ele2).
 
 %%% Helper
-
-equals(V1, V2) ->
-    element(key_pos(), V1) =:= element(key_pos(), V2).
-
--spec add_ts(tuple(), ts()) -> tuple().
-add_ts(Obj, Ts) ->
-    erlang:append_element(Obj, Ts).
-
-add_op(Obj, Op) ->
-    erlang:append_element(Obj, Op).
-
-get_op(Obj) ->
-    element(tuple_size(Obj), Obj).
-
-get_ts(Obj) ->
-    element(tuple_size(Obj) - 1, Obj).
-
--spec add_meta(tuple(), ts(), op()) -> tuple().
-add_meta(Obj, Ts, Op) ->
-    add_op(add_ts(Obj, Ts), Op).
-
-delete_meta(Obj) ->
-    Last = tuple_size(Obj),
-    erlang:delete_element(Last - 1, erlang:delete_element(Last, Obj)).
-
--spec obj2ele(tuple()) -> element().
-obj2ele(Obj) ->
-    {get_ts(Obj), {get_op(Obj), get_val(Obj)}}.
-
-ele2obj({Ts, {Op, Val}}) ->
-    add_meta(Val, Ts, Op).
-
-%% @equiv delete_meta/1
-get_val(Obj) ->
-    delete_meta(Obj).
