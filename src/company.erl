@@ -7,6 +7,9 @@
 
 -include("company.hrl").
 
+debug_level() ->
+    none.
+
 all_nodes() ->
     ['a@127.0.0.1', 'b@127.0.0.1', 'c@127.0.0.1'].
 
@@ -29,15 +32,35 @@ start_dbg() ->
     mnesia_porset:register().
 
 start_por() ->
+    delete_schema(),
+    create_schema(),
     mnesia_start(),
     rpc:multicall(
         company:all_nodes(), mnesia_porset, register, []),
     timer:sleep(100),
     init_por(),
-    write_proj(1).
-    % timer:sleep(2000),
-    % mnesia:dirty_delete(project, "otp").
+    write_proj(1).    % timer:sleep(2000),
+                      % mnesia:dirty_delete(project, "otp").
 
+litmus_test_por() ->
+    start_por(),
+    rpc:call('a@127.0.0.1', company, write_proj, [1]),
+    rpc:call('a@127.0.0.1', mnesia, dirty_delete, [project, "otp"]),
+    rpc:call('c@127.0.0.1', mnesia, dirty_read, [project, "otp"]).
+
+load_test_por() ->
+    start_por(),
+    crazy_write(1000).
+
+crazy_write(N) when N == 3 ->
+    ok;
+crazy_write(N) ->
+    write_proj(N),
+    crazy_write(N - 1).
+
+write_and_read(N) when is_number(N) ->
+    write_proj(N),
+    rpc:multicall(all_nodes(), mnesia, dirty_read, [project, N]).
 
 prepare_por() ->
     delete_schema(),
@@ -49,7 +72,7 @@ check() ->
     rpc:multicall(all_nodes(), ets, tab2list, [mnesia_lib:val({mnesia_porset, project})]).
 
 check_por() ->
-    T=mnesia_lib:val({mnesia_porset, project}),
+    T = mnesia_lib:val({mnesia_porset, project}),
     ets:tab2list(T).
 
 load_bin() ->
@@ -76,7 +99,7 @@ write_proj(2) ->
         [] ->
             write_proj(2)
     end;
-write_proj(N) when is_list(N) ->
+write_proj(N) when is_number(N) ->
     mnesia:dirty_write(project,
                        #project{name = N,
                                 number = 1,
@@ -205,7 +228,9 @@ conflict_write() ->
 
 mnesia_start() ->
     erpc:multicall(
-        company:all_nodes(), mnesia, start, []).
+        company:all_nodes(), mnesia, start, []),
+    erpc:multicall(
+        company:all_nodes(), mnesia_lib, set, [debug, debug_level()]).
 
 add_foo_op() ->
     ets:insert(async_op,
