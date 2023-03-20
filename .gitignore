@@ -1,6 +1,10 @@
 MnesiaCore*
 .DS_Store
 priv/
+*.analysis
+*.cgrind
+*.trace
+
 
 .rebar3
 _*
