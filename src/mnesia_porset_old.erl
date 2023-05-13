@@ -18,7 +18,7 @@
 %% %CopyrightEnd%
 %%
 
--module(mnesia_porset).
+-module(mnesia_porset_old).
 
 -behaviour(mnesia_backend_type).
 

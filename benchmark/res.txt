@@ -1,3 +1,169 @@
+ {cookie,bench_cookie}.
+{generator_profile,async_ec}.
+{statistics_detail,debug}.
+{generator_warmup,12000}.
+{generator_duration,  		90000}.
+{generator_cooldown,  		12000}.
+{generator_nodes,         	
+ ['bench1@vincent-pc',
+    'bench2@vincent-pc'
+ ]}.
+{use_binary_subscriber_key, 	false}.
+{n_generators_per_node, 	2}.
+{write_lock_type,		sticky_write}.
+{table_nodes,         	
+ ['bench1@vincent-pc',
+  'bench2@vincent-pc',
+  'bench3@vincent-pc',
+  'bench4@vincent-pc',
+  'bench5@vincent-pc',
+  'bench6@vincent-pc',
+  'bench7@vincent-pc',
+  'bench8@vincent-pc',
+  'bench9@vincent-pc'
+ ]}.
+{storage_type, 			ram_copies}.
+{n_replicas,   			9}.
+{n_fragments,  			1}.
+{n_subscribers,		        50000}.
+{n_groups,     		        100}.
+{n_servers,    		        20}.
+
+
+
+ started
+bench(141):
+bench(142):                   Starting Mnesia... ok
+bench_populate(40):
+bench_populate(41):           Populate database...
+bench_populate(42):
+bench_populate(64):               Delete old tables...
+bench_populate(72):               Creating ram_copies tables, with 9 replicas distributed over 9 nodes...
+bench_populate(52):               Populate database in async mode...
+bench_populate(178):              Populate 50000 subscribers...
+(bench@vincent-pc)1>
+(bench@vincent-pc)1>
+(bench@vincent-pc)1>
+(bench@vincent-pc)1>
+(bench@vincent-pc)1>  totally 0 bytes
+bench_populate(208):              Populate 100 groups... totally 0 bytes
+bench_populate(247):              Populate 20 servers with 100 records each... totally 0 bytes
+bench_generate(61):
+bench_generate(62):           Start 2 request generators each at 2 nodes...
+bench_generate(63):
+bench_generate(65):               12 seconds warmup...
+bench_generate(92):               90 seconds actual benchmarking...
+bench_generate(98):               12 seconds cooldown...
+bench_generate(595):
+bench_generate(596):          Benchmark result...
+bench_generate(597):
+bench_generate(605):              19294 asyncs per second (TPS).
+bench_generate(606):              2143 asyncPS per table node.
+bench_generate(608):              async micro seconds in average per 207, including latency.
+bench_generate(610):              1727333 async. 0.529591% generator overhead.
+bench_generate(618):
+bench_generate(619):          Statistics per async type...
+bench_generate(620):
+bench_generate(664):              t1......................... n=100.0000%       time=100.0000%  avg micros=207
+bench_generate(623):
+bench_generate(624):          async statistics per table node...
+bench_generate(625):
+bench_generate(655):              'bench1@vincent-pc'........ n= 49.8354%       time= 49.8408%
+bench_generate(655):              'bench2@vincent-pc'........ n= 50.1646%       time= 50.1592%
+bench_generate(628):
+bench_generate(629):          async statistics per generator node...
+bench_generate(630):
+bench_generate(655):              'bench1@vincent-pc'........ n= 49.8354%       time= 49.8408%
+bench_generate(655):              'bench2@vincent-pc'........ n= 50.1646%       time= 50.1592%
+bench(206):
+bench(207):                   Stopping Erlang nodes...
+bench(208):
+bench(212):                       'bench2@vincent-pc'........ ok
+bench(212):                       'bench1@vincent-pc'........ ok
+bench(212):                       'bench9@vincent-pc'........=WARNING REPORT==== 20-Mar-2023::22:05:12.165744 ===
+
+
+
+
+
+{cookie,bench_cookie}.
+{generator_profile,async_ec}.
+{statistics_detail,debug}.
+{generator_warmup,12000}.
+{generator_duration,  		90000}.
+{generator_cooldown,  		12000}.
+{generator_nodes,         	
+ ['bench1@vincent-pc',
+    'bench2@vincent-pc'
+ ]}.
+{use_binary_subscriber_key, 	false}.
+{n_generators_per_node, 	2}.
+{write_lock_type,		sticky_write}.
+{table_nodes,         	
+ ['bench1@vincent-pc',
+  'bench2@vincent-pc',
+  'bench3@vincent-pc',
+  'bench4@vincent-pc',
+  'bench5@vincent-pc',
+  'bench6@vincent-pc',
+  'bench7@vincent-pc'
+ ]}.
+{storage_type, 			ram_copies}.
+{n_replicas,   			7}.
+{n_fragments,  			1}.
+{n_subscribers,		        50000}.
+{n_groups,     		        100}.
+{n_servers,    		        20}.
+
+
+nch(141):
+bench(142):                   Starting Mnesia... ok
+bench_populate(40):
+bench_populate(41):           Populate database...
+bench_populate(42):
+bench_populate(64):               Delete old tables...
+bench_populate(72):               Creating ram_copies tables, with 7 replicas distributed over 7 nodes...
+bench_populate(52):               Populate database in async mode...
+bench_populate(178):              Populate 50000 subscribers... totally 0 bytes
+bench_populate(208):              Populate 100 groups... totally 0 bytes
+bench_populate(247):              Populate 20 servers with 100 records each... totally 0 bytes
+bench_generate(61):
+bench_generate(62):           Start 2 request generators each at 2 nodes...
+bench_generate(63):
+bench_generate(65):               12 seconds warmup...
+bench_generate(92):               90 seconds actual benchmarking...
+bench_generate(98):               12 seconds cooldown...
+bench_generate(595):
+bench_generate(596):          Benchmark result...
+bench_generate(597):
+bench_generate(605):              25611 asyncs per second (TPS).
+bench_generate(606):              3658 asyncPS per table node.
+bench_generate(608):              async micro seconds in average per 156, including latency.
+bench_generate(610):              2278877 async. 1.136414% generator overhead.
+bench_generate(618):
+bench_generate(619):          Statistics per async type...
+bench_generate(620):
+bench_generate(664):              t1......................... n=100.0000%       time=100.0000%  avg micros=156
+bench_generate(623):
+bench_generate(624):          async statistics per table node...
+bench_generate(625):
+bench_generate(655):              'bench1@vincent-pc'........ n= 49.7470%       time= 50.0322%
+bench_generate(655):              'bench2@vincent-pc'........ n= 50.2530%       time= 49.9678%
+bench_generate(628):
+bench_generate(629):          async statistics per generator node...
+bench_generate(630):
+bench_generate(655):              'bench1@vincent-pc'........ n= 49.7470%       time= 50.0322%
+bench_generate(655):              'bench2@vincent-pc'........ n= 50.2530%       time= 49.9678%
+bench(206):
+bench(207):                   Stopping Erlang nodes...
+bench(208):
+bench(212):                       'bench2@vincent-pc'........ ok
+bench(212):                       'bench1@vincent-pc'........ ok
+bench(212):                       'bench7@vincent-pc'........ ok
+bench(212):                       'bench6@vincent-pc'........=WARNING REPORT==== 20-Mar-2023
+
+
+
 {cookie,bench_cookie}.
 {generator_profile,async_ec}.
 {statistics_detail,debug}.

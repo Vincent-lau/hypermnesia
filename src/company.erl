@@ -8,16 +8,25 @@
 -include("company.hrl").
 
 debug_level() ->
-    none.
+    debug.
 
 all_nodes() ->
     ['a@127.0.0.1', 'b@127.0.0.1', 'c@127.0.0.1'].
+
+demo_partition() ->
+    company:mnesia_start(),
+    erlang:disconnect_node('b@127.0.0.1'),
+    erlang:set_cookie(cookie2),
+    company:write_proj(async_ec, 1),
+    erlang:set_cookie(cookie),
+    mnesia_controller:connect_nodes(['b@127.0.0.1', 'c@127.0.0.1']),
+    ets:tab2list(project).
 
 demo_ec() ->
     company:mnesia_start(),
     company:set_debug(debug),
     mnesia:delete_table(project),
-    company:init_proj(dist, porset),
+    company:init_proj(dist, prwset),
     BlockAndWriteEc =
         fun() ->
            inet_tcp_proxy_dist:block('a@127.0.0.1'),
@@ -95,13 +104,13 @@ start_dbg() ->
     mnesia:delete_schema([node()]),
     mnesia:create_schema([node()]),
     mnesia:start(),
-    mnesia_porset:register().
+    mnesia_pawset:register().
 
 start_por() ->
     create_schema(),
     mnesia_start(),
     rpc:multicall(
-        company:all_nodes(), mnesia_porset, register, []),
+        company:all_nodes(), mnesia_pawset, register, []),
     timer:sleep(100),
     init_por(),
     write_proj(dirty, 1).    % timer:sleep(2000),
@@ -132,13 +141,13 @@ prepare_por() ->
     delete_schema(),
     create_schema(),
     mnesia_start(),
-    rpc:multicall(all_nodes(), mnesia_porset, register, []).
+    rpc:multicall(all_nodes(), mnesia_pawset, register, []).
 
 check() ->
     rpc:multicall(all_nodes(), ets, tab2list, []).
 
 check_por() ->
-    T = mnesia_lib:val({mnesia_porset, project}),
+    T = mnesia_lib:val({mnesia_pawset, project}),
     ets:tab2list(T).
 
 load_bin() ->
@@ -200,16 +209,17 @@ write_proj(dirty, N) when is_number(N) ->
           end,
     mnesia:async_dirty(Fun).
 
-
 write_proj(async_ec, K, V) ->
     Fun = fun() ->
-                mnesia:write(#project{name = K,
-                                    number = V,
-                                    lang = "Erlang"})
-            end,
+             mnesia:write(#project{name = K,
+                                   number = V,
+                                   lang = "Erlang"})
+          end,
     mnesia:async_ec(Fun).
 
-
+select_proj() ->
+    mnesia:async_ec(fun() -> mnesia:select(project, [{{project, 4, '$1', '_'}, [], ['$1']}])
+                    end).
 
 read_proj(ec, N) when is_number(N) ->
     Fun = fun() -> mnesia:read(project, N) end,
@@ -226,7 +236,7 @@ init_rocksdb() ->
 
 init_por() ->
     mnesia:create_table(project,
-                        [{porset_copies, all_nodes()}, {attributes, record_info(fields, project)}]).
+                        [{pawset_copies, all_nodes()}, {attributes, record_info(fields, project)}]).
 
 write_por() ->
     mnesia:dirty_write(project,
@@ -259,7 +269,11 @@ final() ->
     mnesia:delete_table(at_dep),
     mnesia:delete_table(in_proj).
 
-init_proj(dist, Type) when Type =:= porset orelse Type =:= porbag->
+init_proj(dist, Type)
+    when Type =:= pawset
+         orelse Type =:= porbag
+         orelse Type =:= prwset
+         orelse Type =:= prwbag ->
     mnesia:create_table(project,
                         [{type, Type},
                          {ram_copies, all_nodes()},
@@ -269,9 +283,9 @@ init_proj(dist, set) ->
                         [{type, set},
                          {ram_copies, all_nodes()},
                          {attributes, record_info(fields, project)}]);
-init_proj(single, porset) ->
+init_proj(single, pawset) ->
     mnesia:create_table(project,
-                        [{type, porset},
+                        [{type, pawset},
                          {ram_copies, [node()]},
                          {attributes, record_info(fields, project)}]).
 
@@ -328,7 +342,7 @@ conflict_write() ->
                                  lang = "Elixir"}])
           end),
     spawn(fun() ->
-             erpc:call('b@127.0.0.1',
+             erpc:call('b@127.0.0',
                        mnesia,
                        dirty_write,
                        [project,

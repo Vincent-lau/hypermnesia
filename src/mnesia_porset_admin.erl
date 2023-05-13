@@ -13,6 +13,9 @@ ensure_started() ->
 
 do_start() ->
     application:ensure_all_started(converl).
+    % TODO consider when to use mnesia_ext_sup:start_proc/6
+
+
     % case mnesia_ext_sup:start_proc(?MODULE,
     %                                ?MODULE,
     %                                start_link,
