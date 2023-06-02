@@ -1,9 +1,8 @@
-foo
+# Hypermnesia auxiliary repo
+
 =====
 
-An OTP application
+This repository is mainly built for analysing the benchmarking results of
+Hypermnesia, and the main notebook can be found inside the benchmark directory.
 
-Build
------
-
-    $ rebar3 compile
+It also has a few example usage of the new API inside `src/company.erl`.
