@@ -13,15 +13,6 @@ debug_level() ->
 all_nodes() ->
     ['a@127.0.0.1', 'b@127.0.0.1', 'c@127.0.0.1'].
 
-demo_partition() ->
-    demo:mnesia_start(),
-    erlang:disconnect_node('b@127.0.0.1'),
-    erlang:set_cookie(cookie2),
-    demo:write_proj(async_ec, 1),
-    erlang:set_cookie(cookie),
-    mnesia_controller:connect_nodes(['b@127.0.0.1', 'c@127.0.0.1']),
-    ets:tab2list(project).
-
 prepare_once() ->
     delete_schema(),
     create_schema().
@@ -32,8 +23,23 @@ proxy_start() ->
     % erpc:multicall(demo:all_nodes(), application, start, [inet_tcp_proxy_dist]).
 
 
+netkern_timeout(T) ->
+    erpc:multicall(all_nodes(), net_kernel, set_net_ticktime, [T]).
+
 netkern_timeout() ->
     erpc:multicall(all_nodes(), net_kernel, set_net_ticktime, [1000]).
+
+demo_partition() ->
+    demo:proxy_start(),
+    demo:mnesia_start(),
+    % run on a
+    erlang:disconnect_node('b@127.0.0.1'),
+    erlang:set_cookie(cookie2),
+    demo:write_proj(async_ec, 2),
+    mnesia:async_ec(fun() -> mnesia:read({project, 2}) end),
+    erlang:set_cookie(cookie),
+    mnesia_controller:connect_nodes(['b@127.0.0.1', 'c@127.0.0.1']),
+    ets:tab2list(project).
 
 
 demo_dirty() ->
@@ -115,26 +121,7 @@ quick_prof(fprof, Name, Key) ->
 quick_prof(eflame) ->
     eflame:apply(demo, "stacks.out", write_proj, [ec, 3]).
 
-demo_dirty() ->
-    demo:mnesia_start(),
-    demo:set_debug(debug),
-    mnesia:delete_table(project),
-    demo:init_proj(dist, set),
-    BlockAndWrite =
-        fun() ->
-           inet_tcp_proxy_dist:block('a@127.0.0.1'),
-           demo:write_proj(dirty, 2)
-        end,
-    spawn('b@127.0.0.1', BlockAndWrite),
-    % run on a
-    demo:write_proj(dirty, 2),
-    mnesia:async_dirty(fun() -> mnesia:delete({project, 2}) end),
-    % what happens on c? both write should be deleted
-    mnesia:async_dirty(fun() -> mnesia:read({project, 2}) end),
-    % allow communication from b to a
-    spawn('b@127.0.0.1', inet_tcp_proxy_dist, allow, ['a@127.0.0.1']),
-    % what happens on a? write from b will propagate from c to a
-    mnesia:async_dirty(fun() -> mnesia:read({project, 2}) end).
+
 
 start() ->
     mnesia_start(),
