@@ -46,7 +46,7 @@ demo_dirty() ->
     BlockAndWriteDirty =
         fun() ->
            inet_tcp_proxy_dist:block('a@127.0.0.1'),
-           demo:write_proj(dirty, 2)
+           demo:write_proj(dirty, 2) % op star
         end,
     % stops all communication from b to a, when run at b
     spawn('b@127.0.0.1', BlockAndWriteDirty),
@@ -63,7 +63,9 @@ demo_dirty() ->
     % allow communication from b to a
     spawn('b@127.0.0.1', inet_tcp_proxy_dist, allow, ['a@127.0.0.1']),
     % and see what happens on a write should propagate to a
+    % i.e. op star will now reach a
     mnesia:async_dirty(fun() -> mnesia:read({project, 2}) end).
+    % we expect b and c to be empty while a has the value
 
 
 demo_ec() ->
