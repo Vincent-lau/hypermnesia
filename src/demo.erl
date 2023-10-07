@@ -14,14 +14,11 @@ all_nodes() ->
     ['a@127.0.0.1', 'b@127.0.0.1', 'c@127.0.0.1'].
 
 prepare_once() ->
-    delete_schema(),
-    create_schema().
-
+    demo:delete_schema(),
+    demo:create_schema().
 
 proxy_start() ->
-    application:start(inet_tcp_proxy_dist).
-    % erpc:multicall(demo:all_nodes(), application, start, [inet_tcp_proxy_dist]).
-
+    application:start(inet_tcp_proxy_dist).    % erpc:multicall(demo:all_nodes(), application, start, [inet_tcp_proxy_dist]).
 
 netkern_timeout(T) ->
     erpc:multicall(all_nodes(), net_kernel, set_net_ticktime, [T]).
@@ -31,22 +28,28 @@ netkern_timeout() ->
 
 demo_partition() ->
     demo:proxy_start(),
+    % disable output of dbg_out
     demo:mnesia_start(),
+    rr('demo'),
+    demo:set_debug(none),
     % run on a
     erlang:disconnect_node('b@127.0.0.1'),
     erlang:set_cookie(cookie2),
-    demo:write_proj(async_ec, 2),
+    mnesia:async_ec(fun() -> mnesia:write(#project{id = 2, lang = "Erlang"}) end),
+    % run on all nodes
     mnesia:async_ec(fun() -> mnesia:read({project, 2}) end),
     erlang:set_cookie(cookie),
     mnesia_controller:connect_nodes(['b@127.0.0.1', 'c@127.0.0.1']),
+    % run on all nodes
+    mnesia:async_ec(fun() -> mnesia:read({project, 2}) end),
     ets:tab2list(project).
-
 
 demo_dirty() ->
     demo:proxy_start(),
     demo:netkern_timeout(),
     demo:mnesia_start(),
     % demo:set_debug(debug),
+    % run these two together, otherwise stabiliser is unhappy
     mnesia:delete_table(project),
     demo:init_proj(dist, set),
     BlockAndWriteDirty =
@@ -70,9 +73,8 @@ demo_dirty() ->
     spawn('b@127.0.0.1', inet_tcp_proxy_dist, allow, ['a@127.0.0.1']),
     % and see what happens on a write should propagate to a
     % i.e. op star will now reach a
-    mnesia:async_dirty(fun() -> mnesia:read({project, 2}) end).
-    % we expect b and c to be empty while a has the value
-
+    mnesia:async_dirty(fun() -> mnesia:read({project, 2})
+                       end).    % we expect b and c to be empty while a has the value
 
 demo_ec() ->
     demo:proxy_start(),
@@ -120,8 +122,6 @@ quick_prof(fprof, Name, Key) ->
 
 quick_prof(eflame) ->
     eflame:apply(demo, "stacks.out", write_proj, [ec, 3]).
-
-
 
 start() ->
     mnesia_start(),
@@ -172,7 +172,6 @@ write_and_read(N) when is_number(N) ->
     write_proj(dirty, N),
     rpc:multicall(all_nodes(), mnesia, dirty_read, [project, N]).
 
-
 check() ->
     rpc:multicall(all_nodes(), ets, tab2list, []).
 
@@ -191,33 +190,16 @@ stop_all() ->
     rpc:eval_everywhere(all_nodes(), erlang, halt, []).
 
 write_proj(trans, N) ->
-    Trans =
-        fun() ->
-           mnesia:write(#project{name = N,
-                                 number = 2,
-                                 lang = "Erlang"})
-        end,
+    Trans = fun() -> mnesia:write(#project{id = N, lang = "Erlang"}) end,
     mnesia:transaction(Trans);
 write_proj(async_ec, N) ->
-    Fun = fun() ->
-             mnesia:write(#project{name = N,
-                                   number = 10,
-                                   lang = "Erlang"})
-          end,
+    Fun = fun() -> mnesia:write(#project{id = N, lang = "Erlang"}) end,
     mnesia:async_ec(Fun);
 write_proj(sync_ec, N) ->
-    Fun = fun() ->
-             mnesia:write(#project{name = N,
-                                   number = 10,
-                                   lang = "Erlang"})
-          end,
+    Fun = fun() -> mnesia:write(#project{id = N, lang = "Erlang"}) end,
     mnesia:sync_ec(Fun);
 write_proj(dirty, 1) ->
-    Fun = fun() ->
-             mnesia:write(#project{name = "otp",
-                                   number = 1,
-                                   lang = "Erlang"})
-          end,
+    Fun = fun() -> mnesia:write(#project{id = "otp", lang = "Erlang"}) end,
     mnesia:async_dirty(Fun);
 % write_proj(dirty, 2) ->
 %     case mnesia:dirty_read(project, "otp") of
@@ -232,20 +214,8 @@ write_proj(dirty, 1) ->
 %             write_proj(dirty, 2)
 %     end;
 write_proj(dirty, N) when is_number(N) ->
-    Fun = fun() ->
-             mnesia:write(#project{name = N,
-                                   number = 1,
-                                   lang = "Erlang"})
-          end,
+    Fun = fun() -> mnesia:write(#project{id = N, lang = "Erlang"}) end,
     mnesia:async_dirty(Fun).
-
-write_proj(async_ec, K, V) ->
-    Fun = fun() ->
-             mnesia:write(#project{name = K,
-                                   number = V,
-                                   lang = "Erlang"})
-          end,
-    mnesia:async_ec(Fun).
 
 select_proj() ->
     mnesia:async_ec(fun() -> mnesia:select(project, [{{project, 4, '$1', '_'}, [], ['$1']}])
@@ -269,10 +239,7 @@ init_por() ->
                         [{pawset_copies, all_nodes()}, {attributes, record_info(fields, project)}]).
 
 write_por() ->
-    mnesia:dirty_write(project,
-                       #project{name = "otp",
-                                number = 1,
-                                lang = "Erlang"}).
+    mnesia:dirty_write(project, #project{id = 1, lang = "Erlang"}).
 
 finish_por() ->
     mnesia:delete_table(project).
@@ -366,19 +333,13 @@ conflict_write() ->
              erpc:call('a@127.0.0.1',
                        mnesia,
                        dirty_write,
-                       [project,
-                        #project{name = "otp",
-                                 number = 2,
-                                 lang = "Elixir"}])
+                       [project, #project{id = 1, lang = "Elixir"}])
           end),
     spawn(fun() ->
              erpc:call('b@127.0.0',
                        mnesia,
                        dirty_write,
-                       [project,
-                        #project{name = "otp",
-                                 number = 1,
-                                 lang = "Erlang"}])
+                       [project, #project{id = 1, lang = "Erlang"}])
           end).
 
 mnesia_restart() ->
@@ -399,8 +360,5 @@ add_foo_op() ->
     ets:insert(async_op,
                #async_op{oid = {project, "otp"},
                          ts = os:timestamp(),
-                         data_rcd =
-                             #project{name = "otp",
-                                      number = 1,
-                                      lang = "Erlang"},
+                         data_rcd = #project{id = 2, lang = "Erlang"},
                          op_type = write}).

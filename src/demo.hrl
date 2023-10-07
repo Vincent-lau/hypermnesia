@@ -8,8 +8,7 @@
 -record(dept, {id, 
                name}).
 
--record(project, {name,
-                  number,
+-record(project, {id,
                   lang}).
 
 
